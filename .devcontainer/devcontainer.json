@@ -1,0 +1,11 @@
+{
+  "name": "VeriTrace-ChainHawk",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-jammy",
+  "forwardPorts": [5000, 7545],
+  "portsAttributes": {
+    "5000": { "label": "VeriTrace 后端+前端" },
+    "7545": { "label": "Ganache RPC" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh"
+}
