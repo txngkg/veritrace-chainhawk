@@ -7,7 +7,7 @@
 
 | 方式 | 链接 | 说明 |
 | --- | --- | --- |
-| 界面预览版 | https://\<你的GitHub用户名\>.github.io/veritrace-chainhawk/ | GitHub Pages 静态托管，永久有效，可浏览全部页面 |
+| 界面预览版 | https://txngkg.github.io/veritrace-chainhawk/ | GitHub Pages 静态托管，永久有效，可浏览全部页面 |
 | 完整功能在线版 | `<部署后替换为 5000 端口的 *.app.github.dev 地址>` | Codespaces 全栈真实运行（MySQL + Ganache + Node 后端），评审期保持运行 |
 | 本地完整部署 | 见「四、一键部署步骤」 | 推荐方式：可体验 MetaMask 签名转账全流程 |
 
