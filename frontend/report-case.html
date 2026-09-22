@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>在线报案</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="navGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/>
+            <stop offset="1" stop-color="#22d3ee"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#navGrad)"/>
+        <rect x="2.75" y="2.75" width="42.5" height="42.5" rx="11.5" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+        <rect x="9" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <rect x="19" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <circle cx="29.5" cy="31" r="5.5" stroke="#c9f6ff" stroke-width="2.2"/>
+        <line x1="33.8" y1="35.3" x2="39" y2="40.5" stroke="#c9f6ff" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-zh">VeriTrace ChainHawk</span>
+      <span class="brand-sep"></span>
+      <span class="brand-en">证溯·链鹰</span>
+    </div>
+    <div class="nav-right">
+      <div class="dropdown">
+        <button class="dropdown-toggle" onclick="toggleDropdown('userMenu')">👤 <strong id="navName">-</strong><span class="arrow">▾</span></button>
+        <div class="dropdown-panel" id="userMenu">
+          <a href="user-center.html">个人中心</a>
+          <a href="javascript:void(0)" onclick="logout()">退出登录</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-title">在线报案</div>
+    <div class="page-sub">选择被骗的转账交易并提交报案材料；报案仅提交材料，溯源取证由监管方处理</div>
+
+    <div class="grid grid-2">
+      <!-- 报案表单 -->
+      <div class="card">
+        <div class="card-title">报案材料</div>
+        <div class="form-group">
+          <label>本人钱包（报案人）</label>
+          <input type="text" id="victimAccount" class="form-control mono" disabled>
+        </div>
+        <div class="form-group">
+          <label>被骗交易记录（链上交易）*</label>
+          <select id="txSelect" class="form-control" onchange="onTxSelect()">
+            <option value="">-- 请选择被骗的转账交易 --</option>
+          </select>
+          <div class="form-hint" id="txHint">请从下拉列表中选择被骗时的转账交易记录</div>
+        </div>
+        <div class="form-group">
+          <label>交易签名（链上比对用）*</label>
+          <input type="text" id="txSignature" class="form-control mono" disabled placeholder="转账时已自动保存，无需填写">
+          <div class="form-hint" id="sigHint"></div>
+        </div>
+        <div class="form-group">
+          <label>被骗经过描述</label>
+          <textarea id="desc" class="form-control" placeholder="请描述被骗经过（非必填，将作为案件备注）"></textarea>
+        </div>
+        <button class="btn btn-warn" style="width:100%;" id="btnReport" onclick="submitCase()">提交报案材料</button>
+        <p class="muted mt-16">报案仅保存材料并上链存证，不会自动执行溯源取证；监管方受理审核通过后将在「案件溯源」中对本案件进行资金溯源与固证。</p>
+      </div>
+
+      <!-- 说明 -->
+      <div class="card">
+        <div class="card-title">审核与取证流程</div>
+        <div class="steps" style="flex-direction:column; gap:12px;">
+          <div class="step"><b>① 提交报案材料</b><p>选择被骗的链上交易，后端将材料证据哈希上链存证</p></div>
+          <div class="step"><b>② 监管审核（签名比对）</b><p>系统自动比对链上原始交易签名与报案提交的签名，一致则通过，不一致标记为恶意报案</p></div>
+          <div class="step"><b>③ 监管溯源取证</b><p>审核通过后监管方手动发起，自动遍历链上资金链路生成结构化证据</p></div>
+          <div class="step"><b>④ 查看取证报告</b><p>个人中心可查看案件状态与溯源取证结果</p></div>
+        </div>
+        <div class="muted mt-16">
+          提交成功后请前往「个人中心 → 我的案件」查看案件审核状态。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script>
+    (function () {
+      if (!guardLogin()) return;
+      const u = getUser();
+      document.getElementById("navName").textContent = shortAddr(u.address, 4) || "-";
+      document.getElementById("victimAccount").value = u.address || "-";
+      let txMap = {};
+      loadTx();
+
+      async function loadTx() {
+        const res = await api("/tx/mine");
+        if (!res.ok) { toast(res.msg, "error"); return; }
+        const sel = document.getElementById("txSelect");
+        const txs = (res.transactions || []).filter(t => t.sender.toLowerCase() === (u.address || "").toLowerCase());
+        if (!txs.length) {
+          sel.innerHTML = `<option value="">-- 暂无本人转出交易，请先发起转账 --</option>`;
+          return;
+        }
+        sel.innerHTML = `<option value="">-- 请选择被骗的转账交易 --</option>` +
+          txs.map((t, i) => {
+            txMap[t.txId] = t;
+            return `<option value="${t.txId}">#${t.txId} | ${new Date(t.timestamp * 1000).toLocaleString()} | 转出 ${t.amountEth} ETH → ${shortAddr(t.receiver)}</option>`;
+          }).join("");
+      }
+
+      function onTxSelect() {
+        const txId = document.getElementById("txSelect").value;
+        const hint = document.getElementById("txHint");
+        const sigInput = document.getElementById("txSignature");
+        const sigHint = document.getElementById("sigHint");
+        if (!txId) {
+          hint.textContent = "请从下拉列表中选择被骗时的转账交易记录";
+          sigInput.value = "";
+          sigHint.textContent = "";
+          return;
+        }
+        const t = txMap[txId];
+        hint.innerHTML = `已选交易：<b>#${t.txId}</b> · 金额：<b>${t.amountEth} ETH</b> · 风险：${riskBadge(t.riskLevel, t.riskText)}`;
+        // 从本地取出该笔交易转账时的 MetaMask 签名
+        const sig = localStorage.getItem("ft_sig_" + t.txId) || "";
+        sigInput.value = sig ? shortHash(sig, 24) : "";
+        sigInput.dataset.sig = sig;
+        sigHint.innerHTML = sig
+          ? '<span style="color:var(--green);">✓ 已保存本笔交易签名，将用于监管审核签名比对</span>'
+          : '<span style="color:var(--yellow);">⚠ 未找到本笔交易签名，请使用发起转账的浏览器提交；签名不一致将被驳回并标记为恶意报案</span>';
+      }
+
+      async function submitCase() {
+        const txId = document.getElementById("txSelect").value;
+        const sigInput = document.getElementById("txSignature");
+        const desc = $("#desc").value.trim();
+        if (!txId) return toast("请选择被骗的转账交易记录", "error");
+        const txSignature = sigInput.dataset.sig || sigInput.value;
+        if (!txSignature) return toast("缺少交易签名，无法提交报案", "error");
+
+        const btn = $("#btnReport");
+        btn.disabled = true; btn.textContent = "提交中...";
+        const res = await api("/report/submit", {
+          method: "POST",
+          body: { txId: Number(txId), txSignature, caseDesc: desc },
+        });
+        btn.disabled = false; btn.textContent = "提交报案材料";
+        if (res.ok) {
+          toast(res.msg, "success", 4000);
+          setTimeout(() => location.href = "user-center.html", 1200);
+        } else {
+          toast(res.msg || "报案提交失败", "error", 4500);
+        }
+      }
+      function $(id) { return document.getElementById(String(id).replace(/^#/, "")); }
+      window.onTxSelect = onTxSelect;
+      window.submitCase = submitCase;
+    })();
+  </script>
+</body>
+</html>

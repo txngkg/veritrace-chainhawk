@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>风险交易查询</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="navGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/>
+            <stop offset="1" stop-color="#22d3ee"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#navGrad)"/>
+        <rect x="2.75" y="2.75" width="42.5" height="42.5" rx="11.5" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+        <rect x="9" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <rect x="19" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <circle cx="29.5" cy="31" r="5.5" stroke="#c9f6ff" stroke-width="2.2"/>
+        <line x1="33.8" y1="35.3" x2="39" y2="40.5" stroke="#c9f6ff" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-zh">VeriTrace ChainHawk</span>
+      <span class="brand-sep"></span>
+      <span class="brand-en">证溯·链鹰</span>
+    </div>
+    <div class="nav-right">
+      <a href="admin-dashboard.html" class="nav-link">总览大屏</a>
+      <a href="admin-case.html" class="nav-link">案件溯源</a>
+      <div class="dropdown">
+        <button class="dropdown-toggle" onclick="toggleDropdown('adminMenu')">🏛️ <strong id="navName">-</strong><span class="arrow">▾</span></button>
+        <div class="dropdown-panel" id="adminMenu">
+          <a href="javascript:void(0)" onclick="logout()">退出登录</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-wide">
+    <div class="flex-between">
+      <div>
+        <div class="page-title">风险交易查询</div>
+        <div class="page-sub">链上中/高风险交易清单（模拟真实案件中小额涉诈资金流转特征）</div>
+      </div>
+      <div class="flex">
+        <select id="minLevel" class="form-control" style="width:150px;" onchange="loadTx()">
+          <option value="">中风险及以上</option>
+          <option value="2">仅中风险</option>
+          <option value="3">仅高风险</option>
+        </select>
+        <button class="btn btn-sm btn-ghost" onclick="loadTx()">刷新</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" id="txTitle">风险交易清单</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>交易ID</th><th>转出钱包</th><th>接收钱包</th><th>金额(ETH)</th>
+              <th>风险等级</th><th>交易时间</th><th>交易签名</th>
+            </tr>
+          </thead>
+          <tbody id="txBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script>
+    (function () {
+      if (!guardAdmin()) return;
+      document.getElementById("navName").textContent = shortAddr(getUser().address, 4) || "-";
+      loadTx();
+
+      async function loadTx() {
+        const risk = document.getElementById("minLevel").value;
+        const res = await api("/admin/risk-tx" + (risk ? "?risk_level=" + risk : ""));
+        if (!res.ok) { toast(res.msg, "error"); return; }
+        const list = res.transactions || [];
+        document.getElementById("txTitle").textContent = "风险交易清单（共 " + res.total + " 笔"
+          + (risk ? " · 仅" + ({ 2: "中风险", 3: "高风险" })[risk] : " · 中风险及以上") + "）";
+        document.getElementById("txBody").innerHTML = list.length ? list.map(t => `
+          <tr>
+            <td class="mono">#${t.txId}</td>
+            <td class="mono">${shortAddr(t.sender)}</td>
+            <td class="mono">${shortAddr(t.receiver)}</td>
+            <td class="mono">${t.amountEth}</td>
+            <td>${riskBadge(t.riskLevel, t.riskText)}</td>
+            <td class="muted">${new Date(t.timestamp * 1000).toLocaleString()}</td>
+            <td class="mono" title="${t.signature || ""}">${t.signature ? shortHash(t.signature, 12) : "—"}</td>
+          </tr>`).join("") : `<tr><td colspan="7" class="empty">暂无风险交易</td></tr>`;
+      }
+      window.loadTx = loadTx;
+    })();
+  </script>
+</body>
+</html>

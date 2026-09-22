@@ -1,0 +1,17 @@
+# Flask Web 框架
+flask>=2.2.0
+
+# MySQL 驱动
+pymysql>=1.0.2
+
+# MySQL 8 默认认证插件依赖
+cryptography>=39.0.0
+
+# 区块链交互（Ganache 联盟链）
+web3>=6.0.0
+
+# 登录令牌签名
+itsdangerous>=2.1.0
+
+# 跨域支持（按需开启，本项目同源部署可不启用）
+flask-cors>=3.0.10

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>案件溯源 · 取证报告</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="navGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/>
+            <stop offset="1" stop-color="#22d3ee"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#navGrad)"/>
+        <rect x="2.75" y="2.75" width="42.5" height="42.5" rx="11.5" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+        <rect x="9" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <rect x="19" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <circle cx="29.5" cy="31" r="5.5" stroke="#c9f6ff" stroke-width="2.2"/>
+        <line x1="33.8" y1="35.3" x2="39" y2="40.5" stroke="#c9f6ff" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-zh">VeriTrace ChainHawk</span>
+      <span class="brand-sep"></span>
+      <span class="brand-en">证溯·链鹰</span>
+    </div>
+    <div class="nav-right">
+      <a href="admin-dashboard.html" class="nav-link">总览大屏</a>
+      <a href="admin-case.html" class="nav-link active">案件溯源</a>
+      <div class="dropdown">
+        <button class="dropdown-toggle" onclick="toggleDropdown('adminMenu')">🏛️ <strong id="navName">-</strong><span class="arrow">▾</span></button>
+        <div class="dropdown-panel" id="adminMenu">
+          <a href="javascript:void(0)" onclick="logout()">退出登录</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-wide">
+    <div class="page-title">案件溯源 · 取证报告</div>
+    <div class="page-sub">查看全部报案案件：签名比对审核 → 溯源取证 → 拓扑图 / 交易明细 / 取证报告</div>
+
+    <div class="grid grid-2">
+      <!-- 案件列表 -->
+      <div class="card">
+        <div class="flex-between">
+          <div class="card-title" style="margin-bottom:0;">全部报案案件</div>
+          <button class="btn btn-sm btn-ghost" onclick="loadCases()">刷新</button>
+        </div>
+        <div id="caseList" class="empty">加载中...</div>
+      </div>
+
+      <!-- 案件基础信息 -->
+      <div class="card">
+        <div class="card-title">案件证据信息</div>
+        <div id="caseDetail" class="empty">请选择左侧案件查看详情</div>
+      </div>
+    </div>
+
+    <!-- 证据详情 -->
+    <div id="evidenceArea" style="display:none;">
+      <div class="flex flex-wrap" style="margin:22px 0 12px;">
+        <button class="btn btn-sm" data-tab="topology" onclick="switchTab('topology')">① 溯源拓扑图</button>
+        <button class="btn btn-sm btn-ghost" data-tab="tx" onclick="switchTab('tx')">② 交易明细证据表</button>
+        <button class="btn btn-sm btn-ghost" data-tab="risk" onclick="switchTab('risk')">③ 可疑风险账户</button>
+        <button class="btn btn-sm btn-ghost" data-tab="report" onclick="switchTab('report')">④ 取证报告预览</button>
+        <button class="btn btn-sm btn-ghost" data-tab="verify" onclick="switchTab('verify')">⑤ 报告哈希核验</button>
+      </div>
+
+      <div class="card" id="tab-topology">
+        <div class="card-title">完整多级资金流转拓扑图 <span class="muted" style="font-weight:400;">绿=低危 · 黄=中危 · 红=高危，悬浮查看详情</span></div>
+        <div class="chart-box" id="topologyChart"></div>
+        <div class="muted mt-16" id="linkLegend"></div>
+      </div>
+
+      <div class="card" id="tab-tx" style="display:none;">
+        <div class="card-title">标准化涉案交易明细证据表（链上为准）</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>序号</th><th>层级</th><th>转出钱包</th><th>接收钱包</th><th>金额(ETH)</th>
+                <th>交易时间</th><th>链上交易ID</th><th>风险等级</th><th>交易签名</th></tr>
+            </thead>
+            <tbody id="txTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="tab-risk" style="display:none;">
+        <div class="card-title">涉案可疑风险账户汇总清单（中风险及以上）</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>序号</th><th>账户</th><th>风险等级</th><th>链路角色</th><th>溯源深度</th><th>参与交易数</th></tr></thead>
+            <tbody id="riskTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="tab-report" style="display:none;">
+        <div class="flex-between">
+          <div class="card-title" style="margin-bottom:0;">取证报告预览</div>
+          <button class="btn btn-sm" onclick="downloadReport()">⬇ 下载取证报告（HTML）</button>
+        </div>
+        <div class="report-box" id="reportPreview" style="margin-top:14px;">加载中...</div>
+      </div>
+
+      <div class="card" id="tab-verify" style="display:none;">
+        <div class="card-title">存证报告哈希固化与核验</div>
+        <div id="verifyBody" class="mt-16"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/charts.js"></script>
+  <script>
+    (function () {
+      if (!guardAdmin()) return;
+      document.getElementById("navName").textContent = shortAddr(getUser().address, 4) || "-";
+
+      let currentCase = null;
+      let currentEvidence = null;
+      let chart = null;
+
+      loadCases();
+
+      async function loadCases() {
+        const res = await api("/report/all");
+        if (!res.ok) { document.getElementById("caseList").innerHTML = `<div class="muted">${res.msg}</div>`; return; }
+        if (!res.cases.length) {
+          document.getElementById("caseList").innerHTML = `<div class="empty">暂无报案案件</div>`;
+          return;
+        }
+        document.getElementById("caseList").innerHTML = res.cases.map(c => `
+          <div class="card" style="margin-bottom:12px; cursor:pointer; ${currentCase && currentCase.id === c.id ? 'border-color:var(--primary);' : ''}" onclick="openCase(${c.id})">
+            <div class="flex-between">
+              <b class="mono" style="color:var(--primary-2);">${c.caseNo}</b>
+              ${caseBadge(c.status)}
+            </div>
+            <div class="muted mt-8">报案人：<span class="mono">${shortAddr(c.reporterAddr)}</span> · 涉案交易：#${c.txId || "—"} · 金额：<b>${c.amountEth || "—"} ETH</b></div>
+            <div class="muted">报案：${c.createdAt || "—"}</div>
+          </div>`).join("");
+      }
+
+      async function openCase(caseId) {
+        const res = await api("/report/detail?caseId=" + caseId);
+        if (!res.ok) { toast(res.msg, "error"); return; }
+        currentCase = res.case;
+        renderCaseInfo(res);
+
+        // 已溯源案件：拉取取证证据包
+        if (res.case.status === "traced") {
+          const tr = await api("/trace/detail?caseId=" + caseId);
+          if (tr.ok && tr.evidence) {
+            currentEvidence = tr.evidence;
+            renderEvidence();
+            document.getElementById("evidenceArea").style.display = "block";
+          } else {
+            currentEvidence = null;
+            document.getElementById("evidenceArea").style.display = "none";
+          }
+        } else {
+          currentEvidence = null;
+          document.getElementById("evidenceArea").style.display = "none";
+        }
+        loadCases();
+      }
+
+      function renderCaseInfo(res) {
+        const c = res.case;
+        const canTrace = c.status === "approved";
+        const showAudit = c.status === "submitted";
+        document.getElementById("caseDetail").innerHTML = `
+          <table>
+            <tr><td class="muted" style="width:130px;">案件编号</td><td class="mono">${c.caseNo}</td></tr>
+            <tr><td class="muted">状态</td><td>${caseBadge(c.status)}</td></tr>
+            <tr><td class="muted">报案人钱包</td><td class="mono">${c.reporterAddr}</td></tr>
+            <tr><td class="muted">涉案链上交易</td><td class="mono">#${c.txId || "—"}</td></tr>
+            <tr><td class="muted">涉案金额</td><td><b>${c.amountEth || "—"} ETH</b></td></tr>
+            <tr><td class="muted">报案描述</td><td>${c.caseDesc || "—"}</td></tr>
+            <tr><td class="muted">报案时间</td><td>${c.createdAt || "—"}</td></tr>
+            <tr><td class="muted">签名比对</td><td>${sigMatchBadge(res.signatureMatch)}</td></tr>
+            <tr><td class="muted">链上证据核验</td><td>${res.evidenceVerified ? '<span class="badge badge-green">核验通过</span>' : '<span class="badge badge-warn">未核验</span>'}</td></tr>
+            ${c.auditRemark ? `<tr><td class="muted">审核意见</td><td>${c.auditRemark}</td></tr>` : ""}
+            ${c.reportHash ? `<tr><td class="muted">报告哈希</td><td class="mono" style="word-break:break-all;">${c.reportHash}</td></tr>` : ""}
+            ${c.tracedAt ? `<tr><td class="muted">溯源时间</td><td>${c.tracedAt}</td></tr>` : ""}
+          </table>
+          ${showAudit ? `
+            <div class="flex-between mt-16" style="align-items:flex-start;">
+              <div class="muted">待审核案件：请先到「报案审核」中比对签名后审核，审核通过后方可溯源取证。</div>
+              <a href="admin-audit.html" class="btn btn-warn">去审核</a>
+            </div>` : ""}
+          ${canTrace ? `
+            <div class="flex-between mt-16" style="align-items:flex-start;">
+              <div class="muted">该案件已审核通过，可执行资金溯源取证（自动遍历链上资金链路）。</div>
+              <button class="btn btn-warn" onclick="startTrace(${c.id})">执行溯源取证</button>
+            </div>` : ""}`;
+      }
+
+      function sigMatchBadge(match) {
+        if (match == null) return `<span class="badge badge-dim">未比对</span>`;
+        return match ? `<span class="badge badge-green">一致</span>` : `<span class="badge badge-3">不一致</span>`;
+      }
+
+      async function startTrace(caseId) {
+        if (!confirm("确认对该案件执行资金溯源取证并生成取证报告？")) return;
+        const res = await api("/trace/run", { method: "POST", body: { caseId } });
+        if (!res.ok) { toast(res.msg || "溯源取证失败", "error", 4500); return; }
+        toast(res.msg, "success", 4000);
+        currentEvidence = res.evidence;
+        currentCase.reportHash = res.reportHash;
+        // 同步刷新案件状态与溯源时间（后端已用最新行构建证据包，tracedAt 必有值）
+        currentCase.status = "traced";
+        currentCase.tracedAt = (res.evidence && res.evidence.case && res.evidence.case.tracedAt) || new Date().toISOString();
+        renderEvidence();
+        document.getElementById("evidenceArea").style.display = "block";
+        loadCases();
+        renderCaseInfo({ case: currentCase, signatureMatch: currentCase.signatureMatch, evidenceVerified: true });
+      }
+
+      function renderEvidence() {
+        if (!currentEvidence) return;
+        renderTopology();
+        renderTxTable();
+        renderRiskTable();
+        renderReportPreview();
+        renderVerify();
+        switchTab("topology");
+      }
+
+      function renderTopology() {
+        const el = document.getElementById("topologyChart");
+        if (chart) chart.dispose();
+        chart = drawTopology(el, currentEvidence.topology);
+        const links = currentEvidence.topology.links || [];
+        const byDepth = {};
+        links.forEach(l => { (byDepth[l.traceDepth] = byDepth[l.traceDepth] || []).push(l); });
+        let html = "<b>资金流转链路：</b>";
+        Object.keys(byDepth).sort((a, b) => a - b).forEach(d => {
+          const sum = byDepth[d].reduce((s, l) => s + (Number(l.amountEth) || 0), 0);
+          html += `第${d}层（${byDepth[d].length}笔，共${sum.toFixed(4)} ETH） → `;
+        });
+        html += "末端归集";
+        document.getElementById("linkLegend").innerHTML = html;
+      }
+
+      function renderTxTable() {
+        const txs = currentEvidence.transactions || [];
+        document.getElementById("txTableBody").innerHTML = txs.length ? txs.map((t, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td><span class="badge badge-blue">第${t.traceDepth}层</span></td>
+            <td class="mono">${shortAddr(t.sender)}</td>
+            <td class="mono">${shortAddr(t.receiver)}</td>
+            <td class="mono">${t.amountEth}</td>
+            <td class="muted">${new Date(t.timestamp * 1000).toLocaleString()}</td>
+            <td class="mono">#${t.txId}</td>
+            <td>${riskBadge(t.riskLevel, t.riskText)}</td>
+            <td class="mono" title="${t.signature || ""}">${t.signature ? shortHash(t.signature, 12) : "—"}</td>
+          </tr>`).join("") : `<tr><td colspan="9" class="empty">无涉案交易</td></tr>`;
+      }
+
+      function renderRiskTable() {
+        const accounts = currentEvidence.riskAccounts || [];
+        document.getElementById("riskTableBody").innerHTML = accounts.length ? accounts.map((a, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td class="mono">${shortAddr(a.address)}</td>
+            <td>${riskBadge(a.riskLevel, a.riskText)}</td>
+            <td>${a.role || "—"}</td>
+            <td>第${a.depth}层</td>
+            <td>${a.txCount || 0}</td>
+          </tr>`).join("") : `<tr><td colspan="6" class="empty">本案件未发现中/高风险可疑账户</td></tr>`;
+      }
+
+      function renderReportPreview() {
+        const ev = currentEvidence, txs = ev.transactions || [], suspects = ev.riskAccounts || [];
+        const c = fullCase();
+        let html = `<h1>诈骗资金溯源取证存证报告</h1>`;
+        html += `<h2>一、案件基础证据信息</h2><table>`;
+        const rows = [
+          ["案件编号", c.caseNo],
+          ["报案人钱包", c.reporterAddr],
+          ["涉案链上交易", "#" + c.txId],
+          ["涉案金额", (c.amountEth || "—") + " ETH"],
+          ["报案描述", c.caseDesc || "—"],
+          ["涉案交易总笔数", txs.length + " 笔"],
+          ["涉案账户总数", (ev.topology.nodes || []).length + " 个"],
+          ["报案时间", fmtTime(c.createdAt)],
+          ["溯源时间", fmtTime(c.tracedAt)],
+          ["报告哈希", currentCase.reportHash || "—"],
+        ];
+        html += rows.map(r => `<tr><td><b>${r[0]}</b></td><td class="mono">${r[1]}</td></tr>`).join("") + `</table>`;
+        html += `<h2>二、完整多级资金流转链路</h2><pre>` + txs.map(t => `${t.traceDepth}层 | ${t.sender} --(${t.amountEth} ETH)--> ${t.receiver} | ${new Date(t.timestamp * 1000).toLocaleString()}`).join("\n") + `</pre>`;
+        html += `<h2>三、标准化涉案交易明细证据表</h2><table><tr><th>序号</th><th>转出钱包</th><th>接收钱包</th><th>金额(ETH)</th><th>交易时间</th><th>链上交易ID</th><th>风险</th></tr>`;
+        html += txs.map((t, i) => `<tr><td>${i + 1}</td><td>${t.sender}</td><td>${t.receiver}</td><td>${t.amountEth}</td><td>${new Date(t.timestamp * 1000).toLocaleString()}</td><td>#${t.txId}</td><td>${t.riskText}</td></tr>`).join("");
+        html += `</table>`;
+        html += `<h2>四、涉案可疑风险账户汇总清单</h2><table><tr><th>账户</th><th>风险等级</th><th>链路角色</th><th>深度</th></tr>`;
+        html += suspects.length ? suspects.map(a => `<tr><td>${a.address}</td><td>${a.riskText}</td><td>${a.role}</td><td>第${a.depth}层</td></tr>`).join("") : `<tr><td colspan="4">未发现中/高风险账户</td></tr>`;
+        html += `</table>`;
+        html += `<h2>五、存证报告哈希固化</h2><p>报告整体 SHA256：<code>${currentCase.reportHash || "—"}</code><br>链上存证：<code>${currentCase.reportHash ? "已上链存证（不可篡改）" : "未生成"}</code></p>`;
+        document.getElementById("reportPreview").innerHTML = html;
+      }
+
+      function renderVerify() {
+        const b = document.getElementById("verifyBody");
+        const r = currentCase;
+        b.innerHTML = `
+          <table>
+            <tr><td class="muted" style="width:140px;">案件编号</td><td class="mono">${r.caseNo}</td></tr>
+            <tr><td class="muted">库内报告哈希</td><td class="mono" style="word-break:break-all;">${r.reportHash || "—"}</td></tr>
+            <tr><td class="muted">链上存证</td><td><span class="badge badge-green">已上链存证 · 不可篡改</span></td></tr>
+            <tr><td class="muted">证据包节点数</td><td>${currentEvidence.topology.nodes.length} 个</td></tr>
+            <tr><td class="muted">证据包链路数</td><td>${currentEvidence.topology.links.length} 条</td></tr>
+            <tr><td class="muted">涉案交易笔数</td><td>${currentEvidence.transactions.length} 笔</td></tr>
+          </table>
+          <div class="muted mt-16">证据哈希由后端对结构化证据内容计算并写入 Ganache 链上存证；链上数据不可篡改，可作为报案核验依据。</div>`;
+      }
+
+      function esc(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+      }
+
+      function fmtTime(t) {
+        if (!t) return "—";
+        const d = new Date(t);
+        return isNaN(d.getTime()) ? String(t) : d.toLocaleString("zh-CN", { hour12: false });
+      }
+
+      /** 合并案件完整字段：currentCase（/report/detail 完整数据）优先，evidence.case（残缺）兜底 */
+      function fullCase() {
+        const ec = (currentEvidence && currentEvidence.case) || {};
+        const cc = currentCase || {};
+        const amountWei = cc.amountWei || ec.amountWei || "";
+        return Object.assign({}, ec, cc, {
+          amountWei: amountWei,
+          amountEth: cc.amountEth || ec.amountEth || (amountWei ? String(Number(amountWei) / 1e18) : ""),
+          caseDesc: cc.caseDesc || ec.caseDesc || "",
+          tracedAt: cc.tracedAt || ec.tracedAt || null,
+          createdAt: cc.createdAt || ec.createdAt || null,
+          reportHash: cc.reportHash || ec.reportHash || "",
+        });
+      }
+
+      /**
+       * 取证报告专用静态拓扑配置（区别于页面交互版 drawTopology）：
+       * 短地址+角色双行标签（白底描边防overlap）、链路金额标注、防重叠布局、深色描边节点，适配白纸打印。
+       */
+      function buildSnapshotOption(topo) {
+        const short = (a) => (a && a.length > 16 ? a.slice(0, 10) + "…" + a.slice(-6) : a);
+        const nodes = (topo.nodes || []).map((n) => {
+          const lv = Math.min(Math.max(Number(n.riskLevel) || 1, 1), 3);
+          const base = Object.assign({}, n);
+          base.name = n.name;
+          base.category = lv - 1;
+          base.symbolSize = n.role && n.role.indexOf("归集终点") >= 0 ? 54 : 46;
+          base.itemStyle = { color: RISK_COLORS[lv], borderColor: "#ffffff", borderWidth: 2, shadowBlur: 6, shadowColor: "rgba(15,23,42,.25)" };
+          base.label = {
+            show: true, position: "bottom", distance: 7, fontSize: 12.5, color: "#111827", fontWeight: 600,
+            backgroundColor: "rgba(255,255,255,.94)", borderColor: "#c9d4e4", borderWidth: 1, borderRadius: 3, padding: [4, 7],
+            formatter: () => short(n.name) + (n.role ? "\n【" + n.role + "】" : ""),
+          };
+          return base;
+        });
+        const links = (topo.links || []).map((e) => {
+          const lv = Math.min(Math.max(Number(e.riskLevel) || 1, 1), 3);
+          return Object.assign({}, e, {
+            value: e.amountEth,
+            lineStyle: { color: RISK_COLORS[lv] === "#10b981" ? "#3b82f6" : RISK_COLORS[lv], width: 2.6, opacity: .88, curveness: .12 },
+          });
+        });
+        return {
+          backgroundColor: "#ffffff",
+          legend: {
+            data: ["低风险账户", "中风险账户", "高风险账户"], top: 8,
+            textStyle: { color: "#374151", fontSize: 13 }, itemWidth: 20, itemHeight: 11, icon: "roundRect",
+          },
+          series: [{
+            type: "graph", layout: "force", roam: false,
+            labelLayout: { hideOverlap: true },
+            force: { repulsion: 750, edgeLength: [130, 240], gravity: 0.12, layoutAnimation: false },
+            edgeSymbol: ["none", "arrow"], edgeSymbolSize: [0, 13],
+            lineStyle: { width: 2.6 },
+            edgeLabel: {
+              show: true, fontSize: 11, color: "#1e3a8a", fontWeight: 600,
+              backgroundColor: "rgba(255,255,255,.92)", borderColor: "#c9d4e4", borderWidth: 1, borderRadius: 3, padding: [2, 5],
+              formatter: (p) => (p.data && (p.data.amountEth || p.data.value) != null ? (p.data.amountEth || p.data.value) + " ETH" : ""),
+            },
+            emphasis: { disabled: true },
+            categories: [
+              { name: "低风险账户", itemStyle: { color: RISK_COLORS[1] } },
+              { name: "中风险账户", itemStyle: { color: RISK_COLORS[2] } },
+              { name: "高风险账户", itemStyle: { color: RISK_COLORS[3] } },
+            ],
+            data: nodes,
+            links: links,
+          }],
+        };
+      }
+
+      /**
+       * 离屏渲染拓扑图快照（PNG dataURL）。
+       * 与页签可见性无关（隐藏容器尺寸为0会导致空图），固定 1000x640 白底 3 倍采样，适配报告打印。
+       */
+      function snapshotTopology() {
+        return new Promise((resolve) => {
+          try {
+            const topo = currentEvidence && currentEvidence.topology;
+            if (!topo || !(topo.nodes || []).length) { resolve(""); return; }
+            const off = document.createElement("div");
+            off.style.cssText = "position:fixed;left:-9999px;top:0;width:1000px;height:640px;background:#ffffff;";
+            document.body.appendChild(off);
+            const c2 = echarts.init(off);
+            c2.setOption(buildSnapshotOption(topo));
+            // 力导布局已关闭动画（layoutAnimation:false），稍等布局稳定后 3 倍采样截图
+            setTimeout(() => {
+              let url = "";
+              try { url = c2.getDataURL({ pixelRatio: 3, backgroundColor: "#ffffff" }) || ""; } catch (e) { url = ""; }
+              c2.dispose();
+              if (off.parentNode) off.parentNode.removeChild(off);
+              // 有效性校验：dataURL 过短视为失败，由文本链路兜底
+              resolve(url && url.length > 20000 ? url : "");
+            }, 700);
+          } catch (e) { resolve(""); }
+        });
+      }
+
+      /** 生成自包含的取证报告 HTML（内联样式、无外部依赖，适配公安办案离线查阅） */
+      function buildReportHtml(topoImg) {
+        const ev = currentEvidence, txs = ev.transactions || [], suspects = ev.riskAccounts || [];
+        const c = fullCase();
+        const weiShow = c.amountWei || (c.amountEth ? String(Math.round(Number(c.amountEth) * 1e18)) : "");
+        const links = (ev.topology.links || []).slice();
+        const byDepth = {};
+        links.forEach(l => { (byDepth[l.traceDepth] = byDepth[l.traceDepth] || []).push(l); });
+        let chainSummary = "";
+        Object.keys(byDepth).sort((a, b) => a - b).forEach(d => {
+          const sum = byDepth[d].reduce((s, l) => s + (Number(l.amountEth) || 0), 0);
+          chainSummary += `第${esc(d)}层：${byDepth[d].length} 笔，共 ${sum.toFixed(4)} ETH　→　`;
+        });
+        chainSummary += "末端归集";
+
+        const chainText = txs.map(t =>
+          `第${t.traceDepth}层 | ${t.sender} --(${t.amountEth} ETH)--> ${t.receiver} | ${new Date(t.timestamp * 1000).toLocaleString()} | 链上交易#${t.txId}`
+        ).join("\n") || "（无涉案交易）";
+
+        const txRows = txs.map((t, i) => `
+          <tr><td>${i + 1}</td><td>第${t.traceDepth}层</td><td class="mono">${esc(t.sender)}</td><td class="mono">${esc(t.receiver)}</td>
+          <td>${esc(t.amountEth)}</td><td>${new Date(t.timestamp * 1000).toLocaleString()}</td><td>#${t.txId}</td><td>${esc(t.riskText)}</td>
+          <td class="mono sm">${esc(t.signature || "—")}</td></tr>`).join("") || `<tr><td colspan="9">无涉案交易</td></tr>`;
+
+        const riskRows = suspects.length ? suspects.map((a, i) => `
+          <tr><td>${i + 1}</td><td class="mono">${esc(a.address)}</td><td>${esc(a.riskText)}</td>
+          <td>${esc(a.role || "—")}</td><td>第${a.depth}层</td><td>${a.txCount || 0}</td></tr>`).join("")
+          : `<tr><td colspan="6">本案件未发现中/高风险可疑账户</td></tr>`;
+
+        const sigTxt = currentCase.signatureMatch == null ? "未比对"
+          : (currentCase.signatureMatch ? "一致（报案材料与链上原始签名核验通过）" : "不一致（存在伪造嫌疑）");
+
+        return `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>诈骗资金溯源取证存证报告 · ${esc(c.caseNo)}</title>
+<style>
+  body{font-family:"Microsoft YaHei",SimHei,sans-serif;max-width:960px;margin:24px auto;padding:0 20px;color:#1a2233;line-height:1.7;}
+  h1{font-size:22px;text-align:center;letter-spacing:2px;margin:8px 0 2px;}
+  .sysname{text-align:center;color:#5a6b85;font-size:13px;}
+  .meta{text-align:center;color:#5a6b85;font-size:12px;border-bottom:2px solid #1a2233;padding-bottom:12px;margin-bottom:18px;}
+  h2{font-size:16px;border-left:4px solid #2456c4;padding-left:10px;margin:26px 0 10px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0;}
+  th,td{border:1px solid #c6cfdd;padding:6px 9px;text-align:left;vertical-align:top;}
+  th{background:#eef2f9;}
+  .mono{font-family:Consolas,monospace;word-break:break-all;}
+  .sm{font-size:10.5px;color:#4a5872;}
+  pre{background:#f4f6fa;border:1px solid #dbe2ee;padding:12px;white-space:pre-wrap;word-break:break-all;font-size:12px;}
+  .hash{font-family:Consolas,monospace;word-break:break-all;background:#f4f6fa;border:1px solid #dbe2ee;padding:8px 10px;font-size:12px;}
+  .topo{text-align:center;margin:10px 0;}
+  .topo img{max-width:100%;border:1px solid #dbe2ee;}
+  .note{color:#5a6b85;font-size:12px;}
+  footer{margin-top:30px;border-top:1px solid #c6cfdd;padding-top:10px;color:#5a6b85;font-size:11.5px;text-align:center;}
+</style></head><body>
+<h1>诈骗资金溯源取证存证报告</h1>
+<div class="sysname">诈骗资金风险监测与报案溯源固证辅助系统（监管取证专用）</div>
+<div class="meta">案件编号：${esc(c.caseNo)}　|　报告生成时间：${new Date().toLocaleString()}　|　数据来源：Ganache 私有链链上存证</div>
+
+<h2>一、案件基础证据信息</h2>
+<table>
+  <tr><th style="width:150px;">案件编号</th><td class="mono">${esc(c.caseNo)}</td></tr>
+  <tr><th>报案人钱包地址</th><td class="mono">${esc(c.reporterAddr)}</td></tr>
+  <tr><th>涉案链上交易</th><td class="mono">#${esc(c.txId)}</td></tr>
+  <tr><th>涉案金额</th><td><b>${esc(c.amountEth)} ETH</b>（${esc(weiShow)} wei）</td></tr>
+  <tr><th>报案描述</th><td>${esc(c.caseDesc || "—")}</td></tr>
+  <tr><th>报案时间</th><td>${esc(fmtTime(c.createdAt))}</td></tr>
+  <tr><th>签名比对结果</th><td>${esc(sigTxt)}</td></tr>
+  <tr><th>溯源时间</th><td>${esc(fmtTime(c.tracedAt))}</td></tr>
+</table>
+
+<h2>二、完整多级资金流转拓扑图</h2>
+${topoImg ? `<div class="topo"><img src="${topoImg}" alt="资金流转拓扑图"></div>` : `<pre>${esc(chainText)}</pre>`}
+<p class="note">读图说明：节点颜色=风险等级（绿=低风险、黄=中风险、红=高风险）；箭头方向=资金流转方向；节点下方标签为账户短地址及其链路角色【】；连线上的数值为该笔流转金额（ETH）。层级汇总：${esc(chainSummary)}</p>
+
+<h2>三、完整多级资金流转链路（文本）</h2>
+<pre>${esc(chainText)}</pre>
+
+<h2>四、标准化涉案交易明细证据表（以链上数据为准）</h2>
+<table><tr><th>序号</th><th>层级</th><th>转出钱包</th><th>接收钱包</th><th>金额(ETH)</th><th>交易时间</th><th>链上交易ID</th><th>风险等级</th><th>交易签名</th></tr>
+${txRows}</table>
+
+<h2>五、涉案可疑风险账户汇总清单（中风险及以上）</h2>
+<table><tr><th>序号</th><th>账户地址</th><th>风险等级</th><th>链路角色</th><th>溯源深度</th><th>参与交易数</th></tr>
+${riskRows}</table>
+
+<h2>六、存证报告哈希固化与核验说明</h2>
+<p>本报告全部证据内容（案件信息、交易链路、账户清单）由系统自动遍历链上资金链路生成，并整体计算 SHA256 哈希：</p>
+<div class="hash">报告哈希（SHA256）：${esc(currentCase.reportHash || "—")}<br>存证状态：${currentCase.reportHash ? "已写入 Ganache 链上存证，不可篡改" : "未生成"}</div>
+<p class="note">证据包统计：节点 ${esc((ev.topology.nodes || []).length)} 个 · 资金链路 ${links.length} 条 · 涉案交易 ${txs.length} 笔 · 可疑账户 ${suspects.length} 个。<br>
+交易签名与资金流转数据均取自链上原始存证，可用于案件串并与司法核验。</p>
+<footer>本报告由「诈骗资金风险监测与报案溯源固证辅助系统」自动生成（模拟原型 · 数据源自 Ganache 私有链）· 仅供办案演示使用</footer>
+</body></html>`;
+      }
+
+      /** 下载取证报告（自包含 HTML 文件）：先异步生成拓扑快照，再组装下载 */
+      async function downloadReport() {
+        if (!currentEvidence || !currentCase) { toast("请先选择已溯源的案件", "warn"); return; }
+        const btn = document.querySelector("#tab-report .btn");
+        if (btn) { btn.disabled = true; btn.textContent = "报告生成中..."; }
+        try {
+          const topoImg = await snapshotTopology();
+          const html = buildReportHtml(topoImg);
+          const blob = new Blob(["\ufeff", html], { type: "text/html;charset=utf-8" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "取证报告_" + (currentCase.caseNo || "case" + currentCase.id) + ".html";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+          toast(topoImg ? "取证报告已生成并开始下载" : "拓扑图快照失败，已用文本链路替代，报告已开始下载", topoImg ? "success" : "warn", 3500);
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = "⬇ 下载取证报告（HTML）"; }
+        }
+      }
+
+      const tabs = ["topology", "tx", "risk", "report", "verify"];
+      function switchTab(name) {
+        tabs.forEach(t => { const el = document.getElementById("tab-" + t); if (el) el.style.display = t === name ? "" : "none"; });
+        document.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("btn-ghost", b.dataset.tab !== name));
+        if (name === "topology" && chart) setTimeout(() => chart.resize(), 50);
+      }
+
+      window.loadCases = loadCases;
+      window.openCase = openCase;
+      window.startTrace = startTrace;
+      window.switchTab = switchTab;
+      window.downloadReport = downloadReport;
+    })();
+  </script>
+</body>
+</html>

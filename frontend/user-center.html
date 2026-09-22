@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人中心</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="navGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/>
+            <stop offset="1" stop-color="#22d3ee"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#navGrad)"/>
+        <rect x="2.75" y="2.75" width="42.5" height="42.5" rx="11.5" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+        <rect x="9" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <rect x="19" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <circle cx="29.5" cy="31" r="5.5" stroke="#c9f6ff" stroke-width="2.2"/>
+        <line x1="33.8" y1="35.3" x2="39" y2="40.5" stroke="#c9f6ff" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-zh">VeriTrace ChainHawk</span>
+      <span class="brand-sep"></span>
+      <span class="brand-en">证溯·链鹰</span>
+    </div>
+    <div class="nav-right">
+      <div class="dropdown">
+        <button class="dropdown-toggle" onclick="toggleDropdown('userMenu')">👤 <strong id="navName">-</strong><span class="arrow">▾</span></button>
+        <div class="dropdown-panel" id="userMenu">
+          <a href="user-center.html">个人中心</a>
+          <a href="javascript:void(0)" onclick="logout()">退出登录</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-wide">
+    <div id="chainDownBanner" class="banner-warn" style="display:none; margin-bottom:14px;"></div>
+
+    <div class="flex-between" style="margin-bottom:20px;">
+      <div>
+        <div class="page-title">个人中心</div>
+        <div class="page-sub">钱包身份 · 我的案件 · 交易记录</div>
+      </div>
+      <div class="flex">
+        <a href="transfer.html" class="btn btn-ghost">发起转账</a>
+        <a href="report-case.html" class="btn btn-warn">在线报案</a>
+      </div>
+    </div>
+
+    <!-- 钱包账户概览 -->
+    <div class="grid grid-3" id="overview" style="margin-bottom:18px;">
+      <div class="stat-card">
+        <div class="stat-label">钱包地址（唯一标识）</div>
+        <div class="stat-num mono" style="font-size:18px;" id="ovAccount">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Ganache 实时余额</div>
+        <div class="stat-num" id="ovBalance">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">身份权限</div>
+        <div class="stat-num" id="ovRole">-</div>
+      </div>
+    </div>
+
+    <!-- 我的案件 -->
+    <div class="card" style="margin-bottom:18px;">
+      <div class="flex-between" style="margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:0;">我的案件</div>
+        <div class="muted">报案仅提交材料并上链存证；溯源取证由监管方处理</div>
+      </div>
+      <div id="caseList" class="empty">加载中...</div>
+    </div>
+
+    <!-- 交易记录 -->
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:0;">交易记录（链上为准）</div>
+        <div class="muted">ETH 展示，链上统一按 wei 存证</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>交易ID</th><th>方向</th><th>对方钱包</th><th>金额(ETH)</th>
+              <th>风险等级</th><th>交易时间</th><th>链上签名</th>
+            </tr>
+          </thead>
+          <tbody id="txBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 案件详情弹窗 -->
+  <div class="modal-mask" id="caseModal">
+    <div class="modal" style="max-width:860px;">
+      <h3>案件详情</h3>
+      <div id="caseDetailBody">加载中...</div>
+      <div class="text-right mt-16">
+        <button class="btn btn-ghost" onclick="document.getElementById('caseModal').classList.remove('show')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script>
+    (function () {
+      if (!guardLogin()) return;
+      const u = getUser();
+      document.getElementById("navName").textContent = shortAddr(u.address, 4) || "-";
+      document.getElementById("ovAccount").textContent = u.address || "-";
+      document.getElementById("ovRole").innerHTML = u.is_admin
+        ? '<span class="badge badge-green">监管管理员</span>'
+        : '<span class="badge badge-blue">普通用户</span>';
+
+      loadBalance();
+      loadCases();
+      loadTx();
+
+      /* ============ 余额 ============ */
+      async function loadBalance() {
+        const res = await api("/wallet/balance");
+        if (res.ok) {
+          document.getElementById("ovBalance").textContent = res.chain_down ? "—" : res.eth + " ETH";
+          if (res.chain_down) showChainDown(res.chain_msg);
+        } else {
+          document.getElementById("ovBalance").textContent = "—";
+          toast(res.msg, "error");
+        }
+      }
+
+      /* ============ 链未连接提示 ============ */
+      function showChainDown(msg) {
+        const box = document.getElementById("chainDownBanner");
+        box.style.display = "block";
+        box.textContent = "⚠ Ganache 链未连接，链上数据暂时为空：" + (msg || "") + "。请先启动 Ganache 并执行 blockchain/deploy.js 部署合约后刷新页面。";
+      }
+
+      /* ============ 实时余额同步 ============ */
+      // 每 15 秒刷新余额与交易，保证与本地 Ganache 实时同步（转账后无需手动刷新）
+      setInterval(() => { loadBalance(); loadTx(); }, 15000);
+      // MetaMask 切换账户：以新活动账户身份重新校验并切换登录身份
+      if (window.ethereum && window.ethereum.on) {
+        window.ethereum.on("accountsChanged", async (accs) => {
+          const addr = accs && accs[0];
+          if (!addr) return; // 钱包锁定等场景不做处理
+          if (addr.toLowerCase() === String(getWallet()).toLowerCase()) { loadBalance(); return; }
+          try {
+            const r = await connectWallet(addr);
+            toast("已切换账户：" + shortAddr(r.address) + (r.is_admin ? "（监管管理员）" : ""), "success");
+            setTimeout(() => { location.href = r.is_admin ? "admin-dashboard.html" : "user-center.html"; }, 600);
+          } catch (e) { toast(e.message || "账户切换失败", "error"); }
+        });
+        // 切换网络后整页刷新，保证余额与链数据一致
+        window.ethereum.on("chainChanged", () => { location.reload(); });
+      }
+
+      /* ============ 我的案件 ============ */
+      async function loadCases() {
+        const res = await api("/report/my");
+        if (!res.ok) { document.getElementById("caseList").innerHTML = `<div class="muted">${res.msg}</div>`; return; }
+        if (!res.cases.length) {
+          document.getElementById("caseList").innerHTML = `<div class="empty">暂无报案<br><a href="report-case.html" class="btn btn-sm mt-16">在线报案</a></div>`;
+          return;
+        }
+        document.getElementById("caseList").innerHTML = res.cases.map(c => `
+          <div class="card" style="margin-bottom:12px; cursor:pointer;" onclick="openCase(${c.id})">
+            <div class="flex-between">
+              <b class="mono" style="color:var(--cyan);">${c.caseNo}</b>
+              ${caseBadge(c.status)}
+            </div>
+            <div class="muted mt-8">涉案链上交易：<span class="mono">#${c.txId || "—"}</span> · 涉案金额：<b>${c.amountEth || "—"} ETH</b></div>
+            <div class="muted">报案时间：${c.createdAt || "—"}${c.auditRemark ? " · 审核意见：" + c.auditRemark : ""}</div>
+          </div>`).join("");
+      }
+
+      async function openCase(caseId) {
+        const res = await api("/report/detail?caseId=" + caseId);
+        if (!res.ok) { toast(res.msg, "error"); return; }
+        document.getElementById("caseModal").classList.add("show");
+        const c = res.case;
+        let html = `
+          <table>
+            <tr><td class="muted" style="width:130px;">案件编号</td><td class="mono">${c.caseNo}</td>
+                <td class="muted" style="width:130px;">状态</td><td>${caseBadge(c.status)}</td></tr>
+            <tr><td class="muted">报案人钱包</td><td class="mono">${c.reporterAddr}</td>
+                <td class="muted">签名比对</td><td>${c.signatureMatch == null ? '<span class="badge badge-dim">未审核</span>' : c.signatureMatch ? '<span class="badge badge-green">一致</span>' : '<span class="badge badge-3">不一致</span>'}</td></tr>
+            <tr><td class="muted">涉案链上交易</td><td class="mono">#${c.txId || "—"}</td>
+                <td class="muted">涉案金额</td><td class="mono">${c.amountEth || "—"} ETH</td></tr>
+            <tr><td class="muted">报案描述</td><td colspan="3">${c.caseDesc || "—"}</td></tr>
+            <tr><td class="muted">报案时间</td><td>${c.createdAt || "—"}</td>
+                <td class="muted">审核时间</td><td>${c.auditedAt || "—"}</td></tr>
+            <tr><td class="muted">链上证据核验</td><td colspan="3">${res.evidenceVerified ? '<span class="badge badge-green">核验通过（与链上存证哈希一致）</span>' : '<span class="badge badge-warn">未核验或缺失</span>'}</td></tr>
+          </table>`;
+        if (res.onChainTx) {
+          html += `<div class="card-title mt-16">链上原始交易签名（审核比对）</div>
+          <table>
+            <tr><td class="muted" style="width:130px;">链上签名</td><td class="mono" style="word-break:break-all;">${shortHash(res.onChainTx.signature, 40)}</td></tr>
+            <tr><td class="muted">报案提交签名</td><td class="mono" style="word-break:break-all;">${shortHash(c.txSignature || "", 40) || "—"}</td></tr>
+            <tr><td class="muted">比对结果</td><td>${res.signatureMatch == null ? '<span class="badge badge-dim">待监管审核</span>' : res.signatureMatch ? '<span class="badge badge-green">签名一致</span>' : '<span class="badge badge-3">签名不一致（恶意报案）</span>'}</td></tr>
+          </table>`;
+        }
+        document.getElementById("caseDetailBody").innerHTML = html;
+      }
+
+      /* ============ 交易记录 ============ */
+      async function loadTx() {
+        const res = await api("/tx/mine");
+        if (!res.ok) { toast(res.msg, "error"); return; }
+        if (res.chain_down) {
+          document.getElementById("txBody").innerHTML = `<tr><td colspan="7" class="empty">链未连接，暂无链上交易数据</td></tr>`;
+          return;
+        }
+        const addr = (u.address || "").toLowerCase();
+        document.getElementById("txBody").innerHTML = res.transactions.length ? res.transactions.map(t => `
+          <tr>
+            <td class="mono">#${t.txId}</td>
+            <td>${t.sender.toLowerCase() === addr ? '<span class="badge badge-blue">转出</span>' : '<span class="badge badge-green">转入</span>'}</td>
+            <td class="mono">${shortAddr(t.sender.toLowerCase() === addr ? t.receiver : t.sender)}</td>
+            <td class="mono">${t.amountEth}</td>
+            <td>${riskBadge(t.riskLevel, t.riskText)}</td>
+            <td class="muted">${new Date(t.timestamp * 1000).toLocaleString()}</td>
+            <td class="mono" title="${t.signature || ""}">${t.signature ? shortHash(t.signature, 12) : "—"}</td>
+          </tr>`).join("") : `<tr><td colspan="7" class="empty">暂无交易记录，请先发起转账</td></tr>`;
+      }
+
+      window.openCase = openCase;
+    })();
+  </script>
+</body>
+</html>

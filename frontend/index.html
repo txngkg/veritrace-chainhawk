@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>诈骗资金风险检测与报案溯源固证辅助系统</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* 首页专属样式（内页不使用动态背景） */
+    .nav-home { background: transparent; border-bottom: 1px solid rgba(30, 42, 63, 0.6); }
+    .hidden { display: none !important; }
+
+    /* ===== 全息玻璃画布：插画容器（毛玻璃 + 呼吸光效） ===== */
+    .hero-art {
+      right: 5vw; top: 50%; transform: translateY(-50%);
+      width: min(46vw, 560px);
+      padding: 8px;
+      border-radius: 26px;
+      background: linear-gradient(160deg, rgba(21,34,60,.55), rgba(9,17,33,.38));
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(86,144,224,.22);
+      animation: breathe 5s ease-in-out infinite;
+    }
+    .hero-art svg { display: block; width: 100%; height: auto; opacity: .96; }
+    @keyframes breathe {
+      0%,100% { box-shadow: 0 0 34px rgba(34,211,238,.08), inset 0 0 50px rgba(34,211,238,.05); }
+      50%     { box-shadow: 0 0 66px rgba(34,211,238,.22), inset 0 0 74px rgba(34,211,238,.10); }
+    }
+
+    /* 贾维斯式旋转刻度环 */
+    .ring-ticks, .ring-arc, .ring-dash { transform-origin: 270px 240px; }
+    .ring-ticks { animation: spin 70s linear infinite; }
+    .ring-arc   { animation: spin 16s linear infinite reverse; }
+    .ring-dash  { animation: spin 45s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 盾牌/放大镜呼吸辉光 */
+    .glass-glow { animation: glowPulse 4.2s ease-in-out infinite; }
+    @keyframes glowPulse {
+      0%,100% { filter: drop-shadow(0 0 5px rgba(34,211,238,.25)); }
+      50%     { filter: drop-shadow(0 0 15px rgba(34,211,238,.60)); }
+    }
+
+    .radar-sweep { transform-origin: 150px 150px; animation: sweep 8s linear infinite; }
+    @keyframes sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .art-node { animation: pulse 3s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+    /* ===== 品牌标识：证溯·链鹰 | VeriTrace ===== */
+    .brand { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+    .brand-mark { width: 68px; height: 68px; flex: 0 0 auto; filter: drop-shadow(0 0 14px rgba(34,211,238,.5)); }
+    .brand-text { display: flex; align-items: center; gap: 16px; white-space: nowrap; }
+    .brand-zh { font-size: 38px; font-weight: 800; letter-spacing: 3.5px; color: #eaf3ff; text-shadow: 0 0 20px rgba(34,211,238,.4); white-space: nowrap; }
+    .brand-sep { width: 1.5px; height: 38px; background: linear-gradient(180deg, transparent, rgba(125,215,255,.7), transparent); flex: 0 0 auto; }
+    .brand-en { font-size: 19px; font-weight: 600; letter-spacing: 6px; color: #7dd7ff; white-space: nowrap; }
+
+    /* ===== 纯背景装饰：侧光条 / 刻度分割线 / 网格 / 光斑 / 星图（无交互） ===== */
+    .brand-side { width: 2px; height: 54px; flex: 0 0 auto; border-radius: 2px;
+      background: linear-gradient(180deg, transparent, #38bdf8 30%, #2563eb 70%, transparent);
+      box-shadow: 0 0 12px rgba(56,189,248,.55); }
+    .brand-divider { position: relative; width: min(520px, 100%); height: 12px; margin: 2px 0 8px; pointer-events: none; opacity: .6; }
+    .brand-divider::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(56,189,248,.35) 35%, rgba(56,189,248,.95) 100%);
+      box-shadow: 0 0 8px rgba(56,189,248,.4); }
+    .brand-divider::after { content: ""; position: absolute; left: 0; right: 0; bottom: 2px; height: 6px;
+      background: repeating-linear-gradient(90deg, rgba(125,215,255,.7) 0 1px, transparent 1px 16px);
+      -webkit-mask-image: linear-gradient(90deg, transparent 30%, #000);
+      mask-image: linear-gradient(90deg, transparent 30%, #000); }
+    .tech-grid { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .03;
+      background-image: linear-gradient(rgba(125,215,255,.9) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(125,215,255,.9) 1px, transparent 1px);
+      background-size: 48px 48px; }
+    .hero-content::before { content: ""; position: absolute; z-index: -1; left: -140px; top: -90px;
+      width: 560px; height: 460px; pointer-events: none;
+      background: radial-gradient(closest-side, rgba(37,99,235,.18), rgba(37,99,235,.07) 45%, transparent 72%); }
+    .star-map { position: absolute; z-index: 1; left: 5vw; bottom: 7vh; width: 380px; height: 300px;
+      pointer-events: none; opacity: .07; animation: starBreathe 22s ease-in-out infinite; }
+    @keyframes starBreathe { 0%,100% { opacity: .07; } 50% { opacity: .11; } }
+
+    @media (max-width: 900px) {
+      .hero-art { display: none; }
+      .star-map { display: none; }
+      .brand-side { height: 40px; }
+      .hero-content { max-width: 100%; }
+      .brand { gap: 12px; }
+      .brand-mark { width: 50px; height: 50px; }
+      .brand-zh { font-size: 26px; letter-spacing: 2px; }
+      .brand-sep { height: 26px; }
+      .brand-en { font-size: 14px; letter-spacing: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="tech-grid" aria-hidden="true"></div>
+  <!-- 顶部导航：未连接钱包仅 登录；连接后按角色显示入口 -->
+  <nav class="navbar nav-home">
+    <div class="nav-right" style="margin-left:auto;">
+      <div id="guestNav" class="hidden" style="display:flex; gap:10px; align-items:center;">
+        <a href="login.html" class="btn">登 录</a>
+      </div>
+      <div id="userNav" class="hidden" style="display:flex; gap:10px; align-items:center;">
+        <a href="user-center.html" class="btn btn-ghost">进入个人中心</a>
+        <div class="dropdown">
+          <button class="dropdown-toggle" onclick="toggleDropdown('homeUserMenu')">👤 <strong id="userName">-</strong><span class="arrow">▾</span></button>
+          <div class="dropdown-panel" id="homeUserMenu">
+            <a href="user-center.html">个人中心</a>
+            <a href="javascript:void(0)" onclick="logout()">退出登录</a>
+          </div>
+        </div>
+      </div>
+      <div id="adminNav" class="hidden" style="display:flex; gap:10px; align-items:center;">
+        <a href="admin-dashboard.html" class="btn">进入监管工作台</a>
+        <div class="dropdown">
+          <button class="dropdown-toggle" onclick="toggleDropdown('homeAdminMenu')">🏛️ <strong id="adminName">-</strong><span class="arrow">▾</span></button>
+          <div class="dropdown-panel" id="homeAdminMenu">
+            <a href="admin-dashboard.html">总览大屏</a>
+            <a href="admin-case.html">案件溯源</a>
+            <a href="javascript:void(0)" onclick="logout()">退出登录</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 首屏：左侧标题 + 右侧科技线条插画 -->
+  <div class="hero">
+    <!-- 动态背景：区块链节点 / 数据流粒子网络 -->
+    <div class="hero-bg">
+      <canvas id="homeCanvas"></canvas>
+    </div>
+
+    <!-- 背景主题元素（右侧）：贾维斯刻度环 / 盾牌 / 放大镜 / 雷达 / 区块链节点数据流 -->
+    <div class="hero-art">
+      <svg class="hero-art-svg" viewBox="0 0 540 480" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">
+        <defs>
+          <filter id="flowGlow" x="-150%" y="-150%" width="400%" height="400%">
+            <feGaussianBlur stdDeviation="2.4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- 贾维斯式外围刻度环（三层反向旋转） -->
+        <g opacity="0.5">
+          <circle class="ring-ticks" cx="270" cy="240" r="230" stroke="#22d3ee" stroke-width="1" stroke-dasharray="2 6"/>
+          <circle class="ring-dash" cx="270" cy="240" r="218" stroke="#3b82f6" stroke-width="1" stroke-dasharray="30 14"/>
+          <path class="ring-arc" d="M270 30 A210 210 0 0 1 480 240" stroke="#22d3ee" stroke-width="1.6" stroke-linecap="round" opacity="0.85"/>
+          <path class="ring-arc" d="M270 450 A210 210 0 0 1 60 240" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round" opacity="0.55" style="animation-delay:-8s"/>
+        </g>
+
+        <!-- 侦探雷达 -->
+        <g opacity="0.6">
+          <circle cx="150" cy="150" r="55" stroke="#3b82f6" stroke-width="1.5" fill="rgba(59,130,246,0.06)"/>
+          <circle cx="150" cy="150" r="88" stroke="#3b82f6" stroke-width="1" stroke-dasharray="4 8"/>
+          <circle cx="150" cy="150" r="120" stroke="#22d3ee" stroke-width="1" stroke-dasharray="2 10"/>
+          <line class="radar-sweep" x1="150" y1="150" x2="150" y2="32" stroke="#22d3ee" stroke-width="1.4"/>
+        </g>
+
+        <!-- 盾牌（资金安全）：玻璃质感 + 呼吸辉光 -->
+        <g class="glass-glow" opacity="0.9">
+          <path d="M430 40 L488 64 V130 C488 196 466 240 430 260 C394 240 372 196 372 130 V64 Z" stroke="#3b82f6" stroke-width="2" fill="rgba(59,130,246,0.10)"/>
+          <path d="M430 54 L474 71 V129 C474 186 456 224 430 243 C404 224 386 186 386 129 V71 Z" stroke="rgba(34,211,238,.4)" stroke-width="1" stroke-dasharray="3 6"/>
+          <path d="M404 128 L424 148 L458 108" stroke="#22d3ee" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+
+        <!-- 放大镜（溯源侦查）：玻璃质感 + 呼吸辉光 -->
+        <g class="glass-glow" opacity="0.9" style="animation-delay:-2.1s">
+          <circle cx="330" cy="300" r="52" stroke="rgba(34,211,238,.25)" stroke-width="1" stroke-dasharray="2 8"/>
+          <circle cx="330" cy="300" r="44" stroke="#3b82f6" stroke-width="2" fill="rgba(34,211,238,0.07)"/>
+          <circle cx="330" cy="300" r="20" stroke="#22d3ee" stroke-width="1" stroke-dasharray="3 5"/>
+          <line x1="362" y1="332" x2="396" y2="366" stroke="#3b82f6" stroke-width="3.2" stroke-linecap="round"/>
+        </g>
+
+        <!-- 区块链节点网络 + 流动光点数据流 -->
+        <g opacity="0.75">
+          <circle class="art-node" cx="120" cy="330" r="11" fill="rgba(34,211,238,0.14)" stroke="#22d3ee" stroke-width="1.5"/>
+          <circle class="art-node" cx="212" cy="384" r="11" fill="rgba(34,211,238,0.14)" stroke="#22d3ee" stroke-width="1.5" style="animation-delay:.6s"/>
+          <circle class="art-node" cx="304" cy="330" r="11" fill="rgba(34,211,238,0.14)" stroke="#22d3ee" stroke-width="1.5" style="animation-delay:1.2s"/>
+          <circle class="art-node" cx="212" cy="276" r="11" fill="rgba(34,211,238,0.14)" stroke="#22d3ee" stroke-width="1.5" style="animation-delay:1.8s"/>
+          <line x1="120" y1="330" x2="212" y2="384" stroke="rgba(34,211,238,.75)" stroke-width="1.1"/>
+          <line x1="212" y1="384" x2="304" y2="330" stroke="rgba(34,211,238,.75)" stroke-width="1.1"/>
+          <line x1="304" y1="330" x2="212" y2="276" stroke="rgba(34,211,238,.75)" stroke-width="1.1"/>
+          <line x1="212" y1="276" x2="120" y2="330" stroke="rgba(34,211,238,.75)" stroke-width="1.1"/>
+        </g>
+        <g>
+          <path id="flowPath" d="M120 330 L212 384 L304 330 L212 276 Z" fill="none" stroke="none"/>
+          <circle r="3" fill="#8ef4ff" filter="url(#flowGlow)">
+            <animateMotion dur="5s" repeatCount="indefinite"><mpath xlink:href="#flowPath" href="#flowPath"/></animateMotion>
+          </circle>
+          <circle r="2.2" fill="#4cc9f0" filter="url(#flowGlow)">
+            <animateMotion dur="5s" begin="-1.25s" repeatCount="indefinite"><mpath xlink:href="#flowPath" href="#flowPath"/></animateMotion>
+          </circle>
+          <circle r="3" fill="#8ef4ff" filter="url(#flowGlow)">
+            <animateMotion dur="5s" begin="-2.5s" repeatCount="indefinite"><mpath xlink:href="#flowPath" href="#flowPath"/></animateMotion>
+          </circle>
+          <circle r="2.2" fill="#4cc9f0" filter="url(#flowGlow)">
+            <animateMotion dur="5s" begin="-3.75s" repeatCount="indefinite"><mpath xlink:href="#flowPath" href="#flowPath"/></animateMotion>
+          </circle>
+        </g>
+      </svg>
+    </div>
+
+    <!-- 左侧：品牌标识（链条+放大镜 SVG 图标）与标语 -->
+    <svg class="star-map" viewBox="0 0 380 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g stroke="#7dd7ff" stroke-width="1" fill="none">
+        <path d="M40 210 L120 150 L210 190 L300 120"/>
+        <path d="M120 150 L90 60 L200 40"/>
+        <path d="M210 190 L260 250 L340 230"/>
+      </g>
+      <g fill="#9be7ff">
+        <circle cx="40" cy="210" r="2.5"/>
+        <circle cx="120" cy="150" r="3.5"/>
+        <circle cx="210" cy="190" r="2"/>
+        <circle cx="300" cy="120" r="3"/>
+        <circle cx="90" cy="60" r="2"/>
+        <circle cx="200" cy="40" r="2.5"/>
+        <circle cx="260" cy="250" r="2"/>
+        <circle cx="340" cy="230" r="3.5"/>
+      </g>
+      <g stroke="#7dd7ff" fill="none" opacity=".6">
+        <circle cx="120" cy="150" r="8"/>
+        <circle cx="300" cy="120" r="6.5"/>
+        <circle cx="340" cy="230" r="7"/>
+      </g>
+    </svg>
+    <div class="hero-content">
+      <div class="brand">
+        <span class="brand-side" aria-hidden="true"></span>
+        <svg class="brand-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#2563eb"/>
+              <stop offset="1" stop-color="#22d3ee"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#brandGrad)"/>
+          <rect x="2.75" y="2.75" width="42.5" height="42.5" rx="11.5" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+          <rect x="9" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+          <rect x="19" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+          <circle cx="29.5" cy="31" r="5.5" stroke="#c9f6ff" stroke-width="2.2"/>
+          <line x1="33.8" y1="35.3" x2="39" y2="40.5" stroke="#c9f6ff" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand-zh">VeriTrace ChainHawk</span>
+          <span class="brand-sep"></span>
+          <span class="brand-en">证溯·链鹰</span>
+        </div>
+      </div>
+      <div class="brand-divider" aria-hidden="true"></div>
+      <p class="slogan">留存交易凭证，助力案件溯源</p>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/home.js"></script>
+  <script>
+    (function () {
+      // 按钱包角色渲染右上角入口
+      const u = getUser();
+      if (getWallet() && u.is_admin) {
+        document.getElementById("adminName").textContent = shortAddr(u.address, 4);
+        document.getElementById("adminNav").classList.remove("hidden");
+      } else if (getWallet()) {
+        document.getElementById("userName").textContent = shortAddr(u.address, 4);
+        document.getElementById("userNav").classList.remove("hidden");
+      } else {
+        document.getElementById("guestNav").classList.remove("hidden");
+      }
+    })();
+  </script>
+</body>
+</html>

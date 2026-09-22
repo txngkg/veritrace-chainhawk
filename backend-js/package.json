@@ -1,0 +1,16 @@
+{
+  "name": "fundtrace-backend",
+  "version": "2.0.0",
+  "description": "诈骗资金风险监测与报案溯源固证辅助系统 —— Node.js 后端（ethers.js + Ganache + MySQL）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "deploy:contract": "cd ../blockchain && node deploy.js"
+  },
+  "dependencies": {
+    "ethers": "^5.7.2",
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "mysql2": "^3.11.0"
+  }
+}

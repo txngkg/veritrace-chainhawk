@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>钱包连接登录</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="navGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/>
+            <stop offset="1" stop-color="#22d3ee"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#navGrad)"/>
+        <rect x="2.75" y="2.75" width="42.5" height="42.5" rx="11.5" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+        <rect x="9" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <rect x="19" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <circle cx="29.5" cy="31" r="5.5" stroke="#c9f6ff" stroke-width="2.2"/>
+        <line x1="33.8" y1="35.3" x2="39" y2="40.5" stroke="#c9f6ff" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-zh">VeriTrace ChainHawk</span>
+      <span class="brand-sep"></span>
+      <span class="brand-en">证溯·链鹰</span>
+    </div>
+    <div class="nav-links">
+      <a href="index.html">首页</a>
+      <a href="login.html" class="active">连接钱包登录</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="card form-card" style="max-width:520px;">
+      <div class="card-title">连接钱包登录</div>
+      <!-- <p class="page-sub">系统不再使用账号密码，所有身份依托 Ganache 钱包账户；钱包地址即为您的唯一标识</p> -->
+      <p class="page-sub">所有身份依托 Ganache 钱包账户，钱包地址即为您的唯一标识</p>
+
+      <div class="form-group">
+        <label>当前钱包地址</label>
+        <input type="text" id="walletAddr" class="form-control mono" disabled placeholder="连接 MetaMask 后自动填充">
+      </div>
+
+      <div id="walletStatus" class="muted mono" style="margin:-6px 0 12px; font-size:12.5px;">钱包状态：检测中...</div>
+
+      <div class="form-group" id="accountPickGroup" style="display:none;">
+        <label>选择登录账户</label>
+        <select id="accountSelect" class="form-control mono" onchange="onPickAccount()"></select>
+      </div>
+
+      <button class="btn" style="width:100%; margin-top:10px;" id="btnUser" onclick="doUserLogin()">
+        🔗 用户钱包登录
+      </button>
+
+      <button class="btn btn-ghost" style="width:100%; margin-top:10px;" id="btnAdmin" onclick="doAdminLogin()">
+        🛡 监管人员登录
+      </button>
+
+      <div class="divider"></div>
+      <div class="muted" style="font-size:13px; line-height:1.9;">
+        <!-- <div>· 用户登录：连接 MetaMask 后可在下拉框中更换不同 Ganache 账户，确认后进入「个人中心」；</div>
+        <div>· 监管人员登录：仅限后端白名单中的管理员钱包地址，验证通过后进入「监管工作台」；</div>
+        <div>· 请确认 MetaMask 已切换至 Ganache 本地私有链（RPC：http://127.0.0.1:7545，chainId 1337）。</div> -->
+      </div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script>
+    (function () {
+      let accountPicked = false;   // 是否已连接并展示账户选择列表
+
+      // 已连接钱包：刷新显示当前地址
+      const wallet = getWallet();
+      if (wallet) document.getElementById("walletAddr").value = wallet;
+
+      /** 从后端实时查询某地址在本 Ganache(7545) 上的余额（不经过 MetaMask，用于识别"不是 Ganache 账户"的地址） */
+      async function fetchChainBalance(addr) {
+        try {
+          const res = await fetch(API_BASE + "/api/wallet/balance", {
+            headers: { "X-Wallet-Address": addr },
+          });
+          const data = await res.json();
+          if (!data.ok) return null;
+          return { eth: data.eth, chainDown: !!data.chain_down };
+        } catch (e) { return null; }
+      }
+
+      /** 填充账户下拉框（active 优先选中），并异步标注每个账户的链上余额 */
+      function fillSelect(list, active) {
+        const sel = document.getElementById("accountSelect");
+        sel.innerHTML = "";
+        list.forEach((a) => {
+          const opt = document.createElement("option");
+          opt.value = a;
+          opt.textContent = shortAddr(a, 6) + "（余额查询中...）";
+          sel.appendChild(opt);
+          fetchChainBalance(a).then((r) => {
+            if (!r) { opt.textContent = shortAddr(a, 6); return; }
+            if (r.chainDown) { opt.textContent = shortAddr(a, 6) + " — 链未连接"; return; }
+            opt.textContent = shortAddr(a, 6) + " — " + r.eth + " ETH"
+              + (Number(r.eth) === 0 ? "（本链无此账户，非 Ganache 导入账户）" : "");
+          });
+        });
+        if (active) sel.value = active;
+      }
+
+      /* ============ 用户登录：连接 -> 选账户 -> 确认 ============ */
+      async function doUserLogin() {
+        const btn = document.getElementById("btnUser");
+        try {
+          if (!accountPicked) {
+            // 第一步：连接 MetaMask，展示可切换的账户列表
+            btn.disabled = true;
+            btn.textContent = "等待 MetaMask 授权...";
+            const accounts = await listMetaMaskAccounts();
+            if (!accounts.length) throw new Error("未获得钱包授权，请允许连接");
+            fillSelect(accounts, accounts[0]);
+            document.getElementById("walletAddr").value = accounts[0];
+            document.getElementById("accountPickGroup").style.display = "";
+            accountPicked = true;
+            toast("已连接 MetaMask，请选择登录账户后确认", "info", 3600);
+            return;
+          }
+          // 第二步：以选中的账户登录
+          const selected = document.getElementById("accountSelect").value;
+          if (!selected) throw new Error("请先选择登录账户");
+          btn.disabled = true;
+          btn.textContent = "正在校验身份...";
+          const data = await connectWallet(selected);
+          document.getElementById("walletAddr").value = data.address;
+          const roleText = data.is_admin ? "监管管理员" : "普通用户";
+          toast(`登录成功（${roleText}）：${shortAddr(data.address)}`, "success", 3000);
+          setTimeout(() => {
+            location.href = data.is_admin ? "admin-dashboard.html" : "user-center.html";
+          }, 800);
+        } catch (e) {
+          toast(e.message || "连接钱包失败", "error", 4000);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = accountPicked ? "✓ 确认以选中账户登录" : "🔗 用户钱包登录";
+        }
+      }
+
+      /* ============ 监管人员登录：遍历授权账户自动找出管理员，找到即直接进入 ============ */
+      async function doAdminLogin() {
+        const btn = document.getElementById("btnAdmin");
+        btn.disabled = true;
+        btn.textContent = "正在验证监管身份...";
+        try {
+          await ensureGanacheChain();
+          // 1) 获取已授权账户；未连接则先请求授权
+          let accounts = await window.ethereum.request({ method: "eth_accounts" }).catch(() => []);
+          if (!accounts.length) {
+            accounts = await window.ethereum.request({ method: "eth_requestAccounts" }).catch(() => []);
+          }
+          if (!accounts.length) throw new Error("MetaMask 未连接：请解锁插件并连接本站点后重试");
+
+          // 2) 候选顺序：下拉框选中账户（若已展示）优先，其余授权账户依次验证
+          const sel = document.getElementById("accountSelect");
+          const candidates = [];
+          if (sel && sel.offsetParent !== null && sel.value) candidates.push(sel.value);
+          accounts.forEach(a => {
+            if (!candidates.some(c => c.toLowerCase() === String(a).toLowerCase())) candidates.push(a);
+          });
+
+          // 3) 逐一校验白名单身份（此阶段不写入登录态）
+          let adminAddr = null;
+          for (const a of candidates) {
+            try {
+              const r = await fetch(API_BASE + "/api/wallet/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ address: a }),
+              });
+              const d = await r.json();
+              if (d.ok && d.is_admin) { adminAddr = a; break; }
+            } catch (e) { /* 尝试下一个 */ }
+          }
+          if (!adminAddr) {
+            throw new Error("已授权账户中无监管管理员：请用「导入账户→私钥」导入监管账户 "
+              + "0x0A739d7AA22bF2696F0674B3A7C645D84f0df7b9 后保持其被选中，再点监管人员登录");
+          }
+
+          // 4) 以管理员身份登录（写入登录态并静默对齐 MetaMask 活动账户）
+          const data = await connectWallet(adminAddr);
+          document.getElementById("walletAddr").value = data.address;
+          toast(`监管管理员登录成功：${shortAddr(data.address)}`, "success", 2500);
+          setTimeout(() => { location.href = "admin-dashboard.html"; }, 700);
+        } catch (e) {
+          toast(e.message || "连接钱包失败", "error", 5200);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "🛡 监管人员登录";
+        }
+      }
+
+      /* 下拉框切换账户：同步显示完整地址 */
+      function onPickAccount() {
+        const v = document.getElementById("accountSelect").value;
+        if (v) document.getElementById("walletAddr").value = v;
+      }
+
+      /* 页面加载后自动检测钱包连接状态，帮助定位登录失败原因 */
+      async function refreshStatus() {
+        const el = document.getElementById("walletStatus");
+        const st = await getWalletStatus();
+        if (!st.installed) {
+          el.textContent = "钱包状态：✗ 未检测到 MetaMask 插件";
+          return;
+        }
+        if (st.unlocked === false) {
+          el.textContent = "钱包状态：MetaMask 已锁定，请点击插件图标解锁后刷新";
+          return;
+        }
+        const chainTxt = st.chainOk ? "Ganache(1337)" : "chainId " + parseInt(st.chainId || "0", 16) + "（非 Ganache，将自动引导切换）";
+        let syncTxt;
+        if (st.chainMatched === true) syncTxt = "与本地 Ganache 同步 ✓";
+        else if (st.chainMatched === false) syncTxt = "✗ 网络指向的链与后端不一致，请把该网络 RPC 改为 http://127.0.0.1:7545";
+        else syncTxt = "⚠ 无法读取链上数据，请检查 MetaMask 网络 RPC（应为 http://127.0.0.1:7545）";
+        el.textContent = "钱包状态：MetaMask 正常 · 网络 " + chainTxt + " · " + syncTxt + " · 已授权账户 " + st.accountCount + " 个";
+      }
+      refreshStatus();
+
+      /* MetaMask 切换网络/账户时自动刷新状态 */
+      if (window.ethereum && window.ethereum.on) {
+        window.ethereum.on("chainChanged", () => { refreshStatus(); });
+      }
+
+      /* MetaMask 中切换账户时，自动刷新账户列表与选中项 */
+      if (window.ethereum && window.ethereum.on) {
+        window.ethereum.on("accountsChanged", async (accs) => {
+          if (!accountPicked) return;
+          let list = accs && accs.length ? accs : [];
+          if (!list.length) {
+            try { list = await listMetaMaskAccounts(); } catch (e) { list = []; }
+          }
+          if (list.length) {
+            fillSelect(list, list[0]);
+            document.getElementById("walletAddr").value = list[0];
+          }
+        });
+      }
+
+      window.doUserLogin = doUserLogin;
+      window.doAdminLogin = doAdminLogin;
+      window.onPickAccount = onPickAccount;
+    })();
+  </script>
+</body>
+</html>

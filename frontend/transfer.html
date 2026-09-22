@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>链上转账</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="navGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/>
+            <stop offset="1" stop-color="#22d3ee"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#navGrad)"/>
+        <rect x="2.75" y="2.75" width="42.5" height="42.5" rx="11.5" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+        <rect x="9" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <rect x="19" y="18" width="14" height="10" rx="5" stroke="#eaf6ff" stroke-width="2.4"/>
+        <circle cx="29.5" cy="31" r="5.5" stroke="#c9f6ff" stroke-width="2.2"/>
+        <line x1="33.8" y1="35.3" x2="39" y2="40.5" stroke="#c9f6ff" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-zh">VeriTrace ChainHawk</span>
+      <span class="brand-sep"></span>
+      <span class="brand-en">证溯·链鹰</span>
+    </div>
+    <div class="nav-right">
+      <div class="dropdown">
+        <button class="dropdown-toggle" onclick="toggleDropdown('userMenu')">👤 <strong id="navName">-</strong><span class="arrow">▾</span></button>
+        <div class="dropdown-panel" id="userMenu">
+          <a href="user-center.html">个人中心</a>
+          <a href="javascript:void(0)" onclick="logout()">退出登录</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-title">资金转账</div>
+    <div class="page-sub">输入 ETH 金额转账，经 MetaMask 签名后广播至 Ganache 链上，交易与风险等级实时上链存证</div>
+
+    <div class="grid grid-2">
+      <!-- 转账表单 -->
+      <div class="card">
+        <div class="card-title">发起转账</div>
+        <div class="form-group">
+          <label>我的钱包（转出方）</label>
+          <input type="text" id="fromAccount" class="form-control mono" disabled>
+        </div>
+        <div class="form-group">
+          <label>接收方钱包地址（接收方）*</label>
+          <input type="text" id="toAccount" class="form-control mono" placeholder="如 0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1">
+        </div>
+        <div class="form-group">
+          <label>转账金额（ETH）*</label>
+          <input type="number" id="amount" class="form-control" min="0.000001" step="0.000001" placeholder="如 3">
+          <div class="form-hint" id="balanceHint"></div>
+        </div>
+        <button class="btn" style="width:100%;" id="btnTransfer" onclick="doTransfer()">确 认 转 账 并 上 链</button>
+        <p class="muted mt-16">转账必须经您本人 MetaMask 签名；签名消息与风险等级将一并上链存证。</p>
+      </div>
+
+      <!-- 转账结果 -->
+      <div class="card">
+        <div class="card-title">上链与风控结果</div>
+        <div id="resultBox" class="empty">发起转账后，此处将展示链上交易ID、交易哈希、风险等级与双方实时余额</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script>
+    (function () {
+      if (!guardLogin()) return;
+      const u = getUser();
+      document.getElementById("navName").textContent = shortAddr(u.address, 4) || "-";
+      document.getElementById("fromAccount").value = u.address || "-";
+      loadBalance();
+
+      async function loadBalance() {
+        const res = await api("/wallet/balance");
+        if (res.ok) {
+          document.getElementById("balanceHint").textContent = "当前余额：" + res.eth + " ETH";
+        }
+      }
+
+      async function doTransfer() {
+        const to_account = $("#toAccount").value.trim();
+        const amount = $("#amount").value;
+        if (!ethers.utils.isAddress(to_account)) return toast("请输入有效的接收方钱包地址", "error");
+        if (!amount || Number(amount) <= 0) return toast("请输入有效的转账金额（ETH）", "error");
+
+        const btn = $("#btnTransfer");
+        btn.disabled = true; btn.textContent = "处理中...";
+        try {
+          // 0) 转账前预检：MetaMask 当前账户、网络与余额必须满足条件，否则明确报错
+          renderHint("步骤0/4 预检：校验 MetaMask 账户、网络与余额...");
+          const active = (await window.ethereum.request({ method: "eth_accounts" }) || [])[0];
+          if (!active) throw new Error("MetaMask 未连接：请解锁插件并连接本站点后重试");
+          if (active.toLowerCase() !== String(u.address).toLowerCase())
+            throw new Error("登录账户与 MetaMask 当前账户不一致：请在 MetaMask 中切换到 "
+              + shortAddr(u.address) + "，或退出后用该账户重新登录");
+          const preInfo = await getContractInfo();
+          if (preInfo && preInfo.contract_address) {
+            let code = "0x";
+            try {
+              code = await window.ethereum.request({ method: "eth_getCode", params: [preInfo.contract_address, "latest"] });
+            } catch (e) {
+              throw new Error("MetaMask 无法访问链上数据：请把当前网络 RPC URL 改为 http://127.0.0.1:7545");
+            }
+            if (code === "0x")
+              throw new Error("MetaMask 当前网络不是系统所在的 Ganache 链：请把该网络 RPC URL 改为 http://127.0.0.1:7545（chainId 1337）");
+          }
+          const balPre = await api("/wallet/balance");
+          if (balPre.ok && !balPre.chain_down && Number(balPre.eth) <= 0)
+            throw new Error("当前账户链上余额为 0，无法支付 gas：请确认是用「导入账户→私钥」导入的 Ganache 账户，并切换到有余额的账户");
+
+          // 1) 后端准备：ETH -> wei，生成 nonce 与签名消息哈希
+          const prep = await api("/tx/prepare", { method: "POST", body: { to: to_account, amountEth: amount } });
+          if (!prep.ok) throw new Error(prep.msg);
+          renderHint("步骤1/4 签名准备完成，等待 MetaMask 签名...");
+
+          // 2) MetaMask 对签名消息哈希执行 personal_sign
+          const from = u.address;
+          const signature = await window.ethereum.request({
+            method: "personal_sign",
+            params: [prep.messageHash, from],
+          });
+          renderHint("步骤2/4 MetaMask 签名完成，广播交易至 Ganache ...");
+
+          // 3) 组装合约调用数据并广播（转账经 MetaMask 签名，后端不代签）
+          const info = await getContractInfo();
+          if (!info) throw new Error("无法获取合约信息，请确认后端与 Ganache 已启动");
+          const iface = new ethers.utils.Interface(info.abi);
+          const data = iface.encodeFunctionData("transferEth", [prep.to, prep.nonce, signature]);
+          const txHash = await window.ethereum.request({
+            method: "eth_sendTransaction",
+            params: [{
+              from,
+              to: info.contract_address,
+              value: ethers.utils.hexlify(ethers.BigNumber.from(prep.amountWei)),
+              data,
+              gas: "0x927C0",           // 600000：实测 transferEth 约 352k gas（TxRecord 8 字段存储开销大），留 1.7 倍余量
+              gasPrice: "0x4A817C800",  // 20 gwei
+            }],
+          });
+          renderHint("步骤3/4 交易已广播，等待上链确认...");
+
+          // 4) 后端回执确认并登记（返回链上交易ID与风险等级）
+          const sub = await api("/tx/submit", { method: "POST", body: { txHash } });
+          if (!sub.ok) throw new Error(sub.msg);
+          // 保存交易签名（用于后续报案时提交比对）
+          try {
+            localStorage.setItem("ft_sig_" + sub.txId, signature);
+          } catch (e) { /* 忽略存储失败 */ }
+          renderResult(sub);
+          toast(`转账成功，风险等级：${sub.riskText}`, sub.riskLevel >= 3 ? "warn" : "success", 4000);
+        } catch (e) {
+          const box = $("#resultBox");
+          box.className = "empty";
+          box.innerHTML = `<span style="color:var(--red);">${e.message || "转账失败"}</span>`;
+          if (e.code === 4001) toast("您取消了 MetaMask 签名", "error");
+          else toast(e.message || "转账失败", "error", 4500);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "确 认 转 账 并 上 链";
+          loadBalance();
+        }
+      }
+
+      function renderHint(msg) {
+        const box = $("#resultBox");
+        box.className = "";
+        box.innerHTML = `<div class="muted">${msg}</div>`;
+      }
+
+      function renderResult(r) {
+        const box = $("#resultBox");
+        box.className = "";
+        box.innerHTML = `
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--line);">
+            <span class="muted">链上交易ID</span><span class="mono">#${r.txId}</span>
+          </div>
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--line);">
+            <span class="muted">交易哈希</span>
+            <span class="mono" title="${r.txHash}">${shortHash(r.txHash, 16)}</span>
+          </div>
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--line);">
+            <span class="muted">上链状态</span><span class="badge badge-green">已上链存证</span>
+          </div>
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--line);">
+            <span class="muted">转账金额</span><span class="mono">${r.amountEth} ETH</span>
+          </div>
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--line);">
+            <span class="muted">接收方</span><span class="mono">${shortAddr(r.to)}</span>
+          </div>
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--line);">
+            <span class="muted">交易时间</span><span>${new Date(r.timestamp * 1000).toLocaleString()}</span>
+          </div>
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--line);">
+            <span class="muted">交易风险等级</span><span>${riskBadge(r.riskLevel, r.riskText)}</span>
+          </div>
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--line);">
+            <span class="muted">转出方余额</span><span class="mono">${r.fromBalanceEth} ETH</span>
+          </div>
+          <div class="muted" style="padding:8px 0;">交易签名已上链存证，报案时用于签名比对核验。</div>
+        `;
+      }
+      function $(id) { return document.getElementById(String(id).replace(/^#/, "")); }
+      window.doTransfer = doTransfer;
+    })();
+  </script>
+</body>
+</html>
